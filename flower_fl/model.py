@@ -1,5 +1,3 @@
-# model.py
-
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, LSTM, Dense, Concatenate
 
@@ -19,8 +17,10 @@ def build_multi_lstm_model(th, td, tw, tp):
     merged_output = Concatenate(name="merged_output")([output_recent, output_daily, output_weekly])
     final_output = Dense(tp, activation="linear", name="final_output")(merged_output)
 
-    model = Model(inputs=[input_recent, input_daily, input_weekly], 
-                  outputs=[output_recent, output_daily, output_weekly, final_output])
+    model = Model(
+        inputs=[input_recent, input_daily, input_weekly],
+        outputs=[output_recent, output_daily, output_weekly, final_output]
+    )
 
     model.compile(
         optimizer="adam",
@@ -30,10 +30,13 @@ def build_multi_lstm_model(th, td, tw, tp):
             "output_weekly": "mse",
             "final_output": "mse"
         },
+        loss_weights={
+            "output_recent": 0.0,
+            "output_daily": 0.0,
+            "output_weekly": 0.0,
+            "final_output": 1.0
+        },
         metrics={
-            "output_recent": ["mae"],
-            "output_daily": ["mae"],
-            "output_weekly": ["mae"],
             "final_output": ["mae"]
         }
     )

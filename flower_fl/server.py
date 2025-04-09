@@ -1,5 +1,3 @@
-# server_lstm.py
-
 import flwr as fl
 import pandas as pd
 import numpy as np
@@ -17,35 +15,34 @@ class AggregateMetricsStrategy(fl.server.strategy.FedAvg):
 
     def aggregate_evaluate(self, server_round, results, failures):
         if not results:
-            print(f"Round {server_round} - Failed to receive client results.")
+            print(f"[Server] Round {server_round} - No evaluation results received.")
             return None, {}
 
         aggregated_loss, _ = super().aggregate_evaluate(server_round, results, failures)
 
-        # Process client metrics
         for _, result in results:
-            client_id = result.metrics.get("client_id", "unknown")
-            rmse = result.metrics["rmse"]
-            r2 = result.metrics["r2"]
-            loss = result.loss
-
             self.metrics_records.append({
                 "round": server_round,
-                "client_id": client_id,
-                "loss": loss,
-                "rmse": rmse,
-                "r2": r2,
+                "client_id": result.metrics.get("client_id", "unknown"),
+                "loss": result.loss,
+                "rmse": result.metrics["rmse"],
+                "r2": result.metrics["r2"],
+                "mae": result.metrics["mae"],
+                "mape": result.metrics["mape"],
                 "model_type": "client"
             })
 
-        # Calculate global averages
         rmse_list = [r.metrics["rmse"] for _, r in results]
         r2_list = [r.metrics["r2"] for _, r in results]
         loss_list = [r.loss for _, r in results]
+        mae_list = [r.metrics["mae"] for _, r in results]
+        mape_list = [r.metrics["mape"] for _, r in results]
 
-        avg_rmse = np.mean(rmse_list)
-        avg_r2 = np.mean(r2_list)
-        avg_loss = np.mean(loss_list)
+        avg_rmse = float(np.mean(rmse_list))
+        avg_r2 = float(np.mean(r2_list))
+        avg_loss = float(np.mean(loss_list))
+        avg_mae = float(np.mean(mae_list))
+        avg_mape = float(np.mean(mape_list))
 
         self.metrics_records.append({
             "round": server_round,
@@ -53,24 +50,28 @@ class AggregateMetricsStrategy(fl.server.strategy.FedAvg):
             "loss": avg_loss,
             "rmse": avg_rmse,
             "r2": avg_r2,
+            "mae": avg_mae,
+            "mape": avg_mape,
             "model_type": "global"
         })
 
-        print(f"\n Round {server_round} results:")
-        print(f"Global RMSE: {avg_rmse:.4f}, Global R²: {avg_r2:.4f}")
-
-        # Dynamically save CSV file
-        from config import LOCAL_EPOCHS, NUM_ROUNDS, RESULTS_DIR
-        import os
-        import pandas as pd
+        print(f"\n[Server] Round {server_round} Results:")
+        print(f"  → Global RMSE: {avg_rmse:.2f}")
+        print(f"  → Global R²:   {avg_r2:.4f}")
+        print(f"  → Global MAE:  {avg_mae:.2f}")
+        print(f"  → Global MAPE:{avg_mape:.2f}%")
 
         os.makedirs(RESULTS_DIR, exist_ok=True)
         filename = f"epoch_{LOCAL_EPOCHS}_num_rounds_{NUM_ROUNDS}.csv"
         df = pd.DataFrame(self.metrics_records)
         df.to_csv(os.path.join(RESULTS_DIR, filename), index=False)
 
-        return aggregated_loss, {"rmse": avg_rmse, "r2": avg_r2}
-
+        return aggregated_loss, {
+            "rmse": avg_rmse,
+            "r2": avg_r2,
+            "mae": avg_mae,
+            "mape": avg_mape
+        }
 
 def fit_config(server_round):
     return {"epoch": LOCAL_EPOCHS}
